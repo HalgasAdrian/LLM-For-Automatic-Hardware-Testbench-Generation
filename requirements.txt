@@ -1,0 +1,17 @@
+# Core training frameworks
+torch>=2.0.0
+transformers>=4.30.0
+peft>=0.4.0
+bitsandbytes>=0.39.0
+accelerate>=0.21.0
+
+# Data handling
+datasets>=2.6.0
+tqdm>=4.65.0
+
+# Verilog parsing & simulation bindings
+pyverilog>=1.4.0
+pyverilator>=0.4.0
+
+# Utilities
+numpy>=1.24.0
