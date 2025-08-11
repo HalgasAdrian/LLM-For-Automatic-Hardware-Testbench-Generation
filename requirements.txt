@@ -20,7 +20,7 @@ jsonlines>=3.1.0
 
 # Verilog processing
 pyverilog>=1.3.0
-hdlparse>=1.1.0
+# hdlparse>=1.0.4  # Commented out - compatibility issues with modern Python
 
 # Utilities
 python-dotenv>=1.0.0
