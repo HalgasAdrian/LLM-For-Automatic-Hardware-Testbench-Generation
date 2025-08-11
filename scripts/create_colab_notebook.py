@@ -1,0 +1,292 @@
+#!/usr/bin/env python3
+"""Create the Colab notebook file."""
+
+import json
+import os
+
+notebook_content = {
+    "nbformat": 4,
+    "nbformat_minor": 0,
+    "metadata": {
+        "colab": {
+            "provenance": [],
+            "gpuType": "T4"
+        },
+        "kernelspec": {
+            "name": "python3",
+            "display_name": "Python 3"
+        },
+        "language_info": {
+            "name": "python"
+        },
+        "accelerator": "GPU"
+    },
+    "cells": [
+        {
+            "cell_type": "markdown",
+            "metadata": {"id": "header"},
+            "source": ["# LLM Testbench Generation Training on Colab\\n\\nThis notebook trains the model on Google Colab with GPU acceleration."]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {"id": "setup_header"},
+            "source": ["## 1. Setup Environment"]
+        },
+        {
+            "cell_type": "code",
+            "metadata": {"id": "check_gpu"},
+            "execution_count": None,
+            "outputs": [],
+            "source": [
+                "# Check GPU availability\\n",
+                "!nvidia-smi\\n",
+                "\\n",
+                "import torch\\n",
+                "print(f\\\"PyTorch version: {torch.__version__}\\\")\\n",
+                "print(f\\\"CUDA available: {torch.cuda.is_available()}\\\")\\n",
+                "if torch.cuda.is_available():\\n",
+                "    print(f\\\"GPU: {torch.cuda.get_device_name(0)}\\\")"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {"id": "mount_header"},
+            "source": ["## 2. Mount Google Drive (Optional)"]
+        },
+        {
+            "cell_type": "code",
+            "metadata": {"id": "mount_drive"},
+            "execution_count": None,
+            "outputs": [],
+            "source": [
+                "# Mount Google Drive to save/load files\\n",
+                "from google.colab import drive\\n",
+                "drive.mount('/content/drive')"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {"id": "upload_header"},
+            "source": ["## 3. Upload and Extract Project Files"]
+        },
+        {
+            "cell_type": "code",
+            "metadata": {"id": "upload_files"},
+            "execution_count": None,
+            "outputs": [],
+            "source": [
+                "# Option 1: Upload from local computer\\n",
+                "from google.colab import files\\n",
+                "uploaded = files.upload()  # Select llm_testbench_colab.zip\\n",
+                "\\n",
+                "# Extract\\n",
+                "!unzip -q llm_testbench_colab.zip\\n",
+                "!ls -la"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "metadata": {"id": "alt_upload"},
+            "execution_count": None,
+            "outputs": [],
+            "source": [
+                "# Option 2: Copy from Google Drive (uncomment if using)\\n",
+                "# !cp /content/drive/MyDrive/llm_testbench_colab.zip .\\n",
+                "# !unzip -q llm_testbench_colab.zip"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {"id": "install_header"},
+            "source": ["## 4. Install Dependencies"]
+        },
+        {
+            "cell_type": "code",
+            "metadata": {"id": "install_deps"},
+            "execution_count": None,
+            "outputs": [],
+            "source": [
+                "# Install requirements\\n",
+                "!pip install -q -r requirements_colab.txt\\n",
+                "\\n",
+                "# Verify installations\\n",
+                "!pip list | grep -E \\\"torch|transformers|peft|bitsandbytes\\\""
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {"id": "wandb_header"},
+            "source": ["## 5. Configure Weights & Biases (Optional)"]
+        },
+        {
+            "cell_type": "code",
+            "metadata": {"id": "setup_wandb"},
+            "execution_count": None,
+            "outputs": [],
+            "source": [
+                "# Set up wandb for experiment tracking\\n",
+                "import os\\n",
+                "\\n",
+                "# Option 1: Set API key directly\\n",
+                "# os.environ['WANDB_API_KEY'] = 'your_api_key_here'\\n",
+                "\\n",
+                "# Option 2: Login interactively\\n",
+                "# import wandb\\n",
+                "# wandb.login()"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {"id": "config_header"},
+            "source": ["## 6. Update Config for Colab GPU"]
+        },
+        {
+            "cell_type": "code",
+            "metadata": {"id": "update_config"},
+            "execution_count": None,
+            "outputs": [],
+            "source": [
+                "# Create optimized config for Colab\\n",
+                "import yaml\\n",
+                "\\n",
+                "# Load existing config\\n",
+                "with open('configs/config.yaml', 'r') as f:\\n",
+                "    config = yaml.safe_load(f)\\n",
+                "\\n",
+                "# Update for GPU training\\n",
+                "config['model']['quantization']['load_in_4bit'] = True  # Enable 4-bit quantization\\n",
+                "config['training']['per_device_train_batch_size'] = 4  # Increase batch size\\n",
+                "config['training']['per_device_eval_batch_size'] = 4\\n",
+                "config['training']['gradient_accumulation_steps'] = 4\\n",
+                "config['training']['fp16'] = True  # Enable mixed precision\\n",
+                "config['training']['num_train_epochs'] = 5  # More epochs\\n",
+                "\\n",
+                "# Optionally use larger model if you have enough GPU memory\\n",
+                "# config['model']['base_model'] = \\\"meta-llama/Llama-2-7b-hf\\\"  # Requires HF token\\n",
+                "\\n",
+                "# Save updated config\\n",
+                "with open('configs/config_colab.yaml', 'w') as f:\\n",
+                "    yaml.dump(config, f)\\n",
+                "\\n",
+                "print(\\\"Config updated for Colab GPU training\\\")"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {"id": "train_header"},
+            "source": ["## 7. Run Training"]
+        },
+        {
+            "cell_type": "code",
+            "metadata": {"id": "run_training"},
+            "execution_count": None,
+            "outputs": [],
+            "source": [
+                "# Set config file\\n",
+                "!cp configs/config_colab.yaml configs/config.yaml\\n",
+                "\\n",
+                "# Run training\\n",
+                "!python scripts/train.py"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {"id": "save_header"},
+            "source": ["## 8. Save Trained Model"]
+        },
+        {
+            "cell_type": "code",
+            "metadata": {"id": "compress_model"},
+            "execution_count": None,
+            "outputs": [],
+            "source": [
+                "# Compress the trained model\\n",
+                "!cd models/checkpoints && zip -r /content/trained_model.zip * && cd /content\\n",
+                "!ls -lh trained_model.zip"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "metadata": {"id": "download_model"},
+            "execution_count": None,
+            "outputs": [],
+            "source": [
+                "# Option 1: Download to local computer\\n",
+                "from google.colab import files\\n",
+                "files.download('trained_model.zip')"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "metadata": {"id": "save_drive"},
+            "execution_count": None,
+            "outputs": [],
+            "source": [
+                "# Option 2: Save to Google Drive\\n",
+                "!cp trained_model.zip /content/drive/MyDrive/\\n",
+                "print(\\\"Model saved to Google Drive\\\")"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {"id": "test_header"},
+            "source": ["## 9. Test Generation (Optional)"]
+        },
+        {
+            "cell_type": "code",
+            "metadata": {"id": "test_gen"},
+            "execution_count": None,
+            "outputs": [],
+            "source": [
+                "# Quick test of the trained model\\n",
+                "from transformers import AutoModelForCausalLM, AutoTokenizer\\n",
+                "from peft import PeftModel\\n",
+                "\\n",
+                "# Load model\\n",
+                "base_model_name = config['model']['base_model']\\n",
+                "model_path = \\\"./models/checkpoints\\\"\\n",
+                "\\n",
+                "tokenizer = AutoTokenizer.from_pretrained(model_path)\\n",
+                "model = AutoModelForCausalLM.from_pretrained(\\n",
+                "    base_model_name,\\n",
+                "    torch_dtype=torch.float16,\\n",
+                "    device_map=\\\"auto\\\"\\n",
+                ")\\n",
+                "model = PeftModel.from_pretrained(model, model_path)\\n",
+                "\\n",
+                "# Test generation\\n",
+                "test_prompt = \\\"\\\"\\\"Generate a Verilog testbench for the following design under test (DUT):\\n",
+                "```verilog\\n",
+                "module counter(\\n",
+                "    input clk,\\n",
+                "    input reset,\\n",
+                "    output reg [3:0] count\\n",
+                ");\\n",
+                "    always @(posedge clk or posedge reset) begin\\n",
+                "        if (reset)\\n",
+                "            count <= 0;\\n",
+                "        else\\n",
+                "            count <= count + 1;\\n",
+                "    end\\n",
+                "endmodule\\n",
+                "```\\n",
+                "\\n",
+                "### Response:\\\"\\\"\\\"\\n",
+                "\\n",
+                "inputs = tokenizer(test_prompt, return_tensors=\\\"pt\\\").to(model.device)\\n",
+                "outputs = model.generate(**inputs, max_new_tokens=500, temperature=0.7)\\n",
+                "print(tokenizer.decode(outputs[0], skip_special_tokens=True))"
+            ]
+        }
+    ]
+}
+
+# Create notebooks directory if it doesn't exist
+os.makedirs('notebooks', exist_ok=True)
+
+# Write the notebook file
+with open('notebooks/train_on_colab.ipynb', 'w') as f:
+    json.dump(notebook_content, f, indent=2)
+
+print("Created notebooks/train_on_colab.ipynb")
+print("You can now upload this file directly to Google Colab!")
