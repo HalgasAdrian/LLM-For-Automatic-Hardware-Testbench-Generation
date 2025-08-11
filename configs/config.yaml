@@ -1,0 +1,82 @@
+# Project configuration
+project:
+  name: "llm-testbench-gen"
+  seed: 42
+  output_dir: "./outputs"
+
+# Data configuration
+data:
+  raw_data_path: "./data/raw"
+  processed_data_path: "./data/processed"
+  test_results_path: "./data/test_results"
+  
+  # Data split ratios
+  train_split: 0.7
+  val_split: 0.15
+  test_split: 0.15
+  
+  # Processing parameters
+  max_dut_length: 2048
+  max_testbench_length: 4096
+  
+# Model configuration
+model:
+  base_model: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+  # Alternative: "meta-llama/Llama-2-7b-hf"
+  
+  # LoRA configuration
+  lora:
+    r: 16
+    lora_alpha: 32
+    target_modules: ["q_proj", "v_proj", "k_proj", "o_proj"]
+    lora_dropout: 0.1
+    bias: "none"
+    task_type: "CAUSAL_LM"
+  
+  # Quantization configuration
+  quantization:
+    load_in_4bit: true
+    bnb_4bit_compute_dtype: "float16"
+    bnb_4bit_use_double_quant: true
+    bnb_4bit_quant_type: "nf4"
+
+# Training configuration
+training:
+  output_dir: "./models/checkpoints"
+  num_train_epochs: 3
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 2e-4
+  warmup_steps: 100
+  logging_steps: 10
+  save_steps: 500
+  eval_steps: 100
+  save_total_limit: 3
+  load_best_model_at_end: true
+  fp16: true
+  optim: "paged_adamw_32bit"
+  max_grad_norm: 0.3
+  warmup_ratio: 0.03
+  lr_scheduler_type: "constant"
+
+# Evaluation configuration
+evaluation:
+  test_set_size: 15
+  metrics:
+    - "compilation_success"
+    - "simulation_success"
+    - "syntax_correctness"
+    - "coverage_score"
+  
+  # Verilog tools
+  iverilog_timeout: 30  # seconds
+  simulation_timeout: 60  # seconds
+
+# Generation configuration
+generation:
+  max_new_tokens: 2048
+  temperature: 0.7
+  top_p: 0.95
+  do_sample: true
+  num_return_sequences: 1

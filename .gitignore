@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ML/DL
+*.pth
+*.pt
+*.bin
+*.safetensors
+*.ckpt
+models/checkpoints/*
+!models/checkpoints/.gitkeep
+wandb/
+runs/
+outputs/
+
+# Data
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/test_results/*
+!data/test_results/.gitkeep
+*.csv
+*.json
+*.jsonl
+
+# Verilog
+*.vcd
+*.out
+sim
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Temporary files
+temp_*
+tmp/
+*.tmp
