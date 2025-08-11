@@ -156,7 +156,7 @@ def setup_training_args(config: dict):
         logging_steps=config['training']['logging_steps'],
         save_steps=config['training']['save_steps'],
         eval_steps=config['training']['eval_steps'],
-        evaluation_strategy="steps",
+        eval_strategy="steps",
         save_total_limit=config['training']['save_total_limit'],
         load_best_model_at_end=config['training']['load_best_model_at_end'],
         fp16=config['training']['fp16'],
