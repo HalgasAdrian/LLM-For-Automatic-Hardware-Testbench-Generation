@@ -42,24 +42,109 @@ class TestbenchEvaluator:
         )
         
     def generate_testbench(self, dut_code: str, max_new_tokens: int = 2048) -> str:
-        """Generate a testbench for given DUT code."""
-        # Format prompt
+        """Generate a testbench for given DUT code with improved prompting."""
+        
+        # Extract module information from DUT
+        module_match = re.search(r'module\s+(\w+)\s*\((.*?)\);', dut_code, re.DOTALL)
+        if module_match:
+            module_name = module_match.group(1)
+            ports_section = module_match.group(2)
+            
+            # Extract ports
+            inputs = re.findall(r'input\s+(?:\[\d+:\d+\]\s+)?(\w+)', ports_section)
+            outputs = re.findall(r'output\s+(?:reg\s+)?(?:\[\d+:\d+\]\s+)?(\w+)', ports_section)
+            
+            # Extract bit widths
+            input_widths = {}
+            output_widths = {}
+            for match in re.finditer(r'input\s+\[(\d+):(\d+)\]\s+(\w+)', ports_section):
+                width = int(match.group(1)) - int(match.group(2)) + 1
+                input_widths[match.group(3)] = width
+            for match in re.finditer(r'output\s+(?:reg\s+)?\[(\d+):(\d+)\]\s+(\w+)', ports_section):
+                width = int(match.group(1)) - int(match.group(2)) + 1
+                output_widths[match.group(3)] = width
+        else:
+            module_name = "top_module"
+            inputs = []
+            outputs = []
+            input_widths = {}
+            output_widths = {}
+        
+        # Create enhanced prompt with syntax guidance
         prompt = f"""Generate a Verilog testbench for the following design under test (DUT). The testbench should include proper initialization, stimulus generation, and output verification.
 
+CRITICAL VERILOG SYNTAX RULES - MUST FOLLOW:
+1. Start EXACTLY with: `timescale 1ns / 1ps
+2. Module declaration: module {module_name}_tb; (no parentheses for testbench)
+3. Use 'initial begin' NOT 'initial {{' - always use 'begin/end' keywords
+4. Every 'begin' MUST have a matching 'end'
+5. Declare ALL inputs as 'reg' type
+6. Declare ALL outputs as 'wire' type
+7. For bit vectors use format [MSB:0], e.g., reg [7:0] data; for 8-bit signal
+8. Binary literals: use width'b format, e.g., 8'b10101010 NOT 10'b10101010
+9. Cannot assign values to wires in initial blocks
+10. End the file with 'endmodule'
+11. Use $finish; to end simulation (with semicolon)
+12. Only ONE testbench module per file
+
+DUT CODE:
 ```verilog
 {dut_code.strip()}
 ```
 
+Based on the DUT above:
+- Module name: {module_name}
+- Inputs to declare as reg: {', '.join(inputs)}
+- Outputs to declare as wire: {', '.join(outputs)}
+
+TEMPLATE STRUCTURE TO FOLLOW:
+```verilog
+`timescale 1ns / 1ps
+
+module {module_name}_tb;
+    // Declare registers for all inputs
+{chr(10).join(f"    reg {f'[{input_widths.get(inp, 1)-1}:0] ' if inp in input_widths and input_widths[inp] > 1 else ''}{inp};" for inp in inputs)}
+    
+    // Declare wires for all outputs
+{chr(10).join(f"    wire {f'[{output_widths.get(out, 1)-1}:0] ' if out in output_widths and output_widths[out] > 1 else ''}{out};" for out in outputs)}
+    
+    // Instantiate the DUT
+    {module_name} uut (
+{chr(10).join(f"        .{port}({port}){',' if i < len(inputs + outputs) - 1 else ''}' for i, port in enumerate(inputs + outputs))}
+    );
+    
+    initial begin
+        // Initialize all inputs to 0
+{chr(10).join(f"        {inp} = {input_widths.get(inp, 1)}'b0;" for inp in inputs)}
+        
+        // Add your test cases here
+        #10; // Wait 10 time units
+        
+        // Display initial values
+        $display("Starting testbench for {module_name}");
+        
+        // Test cases go here
+        
+        // End simulation
+        #100;
+        $display("Test completed");
+        $finish;
+    end
+endmodule
+```
+
+Now generate a complete, syntactically correct testbench following the template above. Include meaningful test cases based on the DUT functionality.
+
 ### Response:"""
         
         # Tokenize
-        inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=2048)
-        inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
+        inputs_tok = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=2048)
+        inputs_tok = {k: v.to(self.model.device) for k, v in inputs_tok.items()}
         
         # Generate
         with torch.no_grad():
             outputs = self.model.generate(
-                **inputs,
+                **inputs_tok,
                 max_new_tokens=max_new_tokens,
                 temperature=self.config['generation']['temperature'],
                 top_p=self.config['generation']['top_p'],
@@ -78,7 +163,44 @@ class TestbenchEvaluator:
         # Clean the generated code
         generated_text = clean_verilog_code(generated_text)
         
+        # Additional post-processing to fix common issues
+        generated_text = self.post_process_testbench(generated_text)
+        
         return generated_text
+    
+    def post_process_testbench(self, tb_code: str) -> str:
+        """Post-process generated testbench to fix common syntax errors."""
+        # Remove any markdown artifacts
+        tb_code = re.sub(r'```verilog\s*', '', tb_code)
+        tb_code = re.sub(r'```\s*', '', tb_code)
+        
+        # Fix common syntax errors
+        tb_code = tb_code.replace('initial {', 'initial begin')
+        tb_code = tb_code.replace('}', 'end')
+        
+        # Fix incorrect bit width syntax (e.g., 10'b to 8'b)
+        tb_code = re.sub(r"(\d+)'b(\d+)", lambda m: f"{len(m.group(2))}'b{m.group(2)}", tb_code)
+        
+        # Ensure proper module ending
+        if 'endmodule' not in tb_code:
+            tb_code = tb_code.rstrip() + '\nendmodule'
+        
+        # Fix missing semicolons after $finish
+        tb_code = re.sub(r'\$finish\s*(?!;)', '$finish;', tb_code)
+        
+        # Remove duplicate initial blocks if they exist
+        initial_blocks = tb_code.split('initial begin')
+        if len(initial_blocks) > 5:  # Too many initial blocks
+            # Keep first block (module declaration) and next 2-3 test blocks
+            reconstructed = initial_blocks[0]
+            for i in range(1, min(4, len(initial_blocks))):
+                if 'endmodule' not in initial_blocks[i]:
+                    reconstructed += 'initial begin' + initial_blocks[i]
+            if 'endmodule' not in reconstructed:
+                reconstructed += '\nendmodule'
+            tb_code = reconstructed
+        
+        return tb_code.strip()
     
     def evaluate_single(self, dut_code: str, reference_tb: str = None) -> Dict:
         """Evaluate a single DUT-testbench pair."""
