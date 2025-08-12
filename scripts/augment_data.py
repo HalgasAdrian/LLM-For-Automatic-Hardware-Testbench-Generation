@@ -313,6 +313,313 @@ endmodule"""
     
     examples.append((shift_dut, shift_tb))
     
+    # 6. Priority Encoder
+    priority_dut = """module priority_encoder(
+    input [3:0] in,
+    output reg [1:0] out,
+    output reg valid
+);
+    always @(*) begin
+        valid = 1'b1;
+        if (in[3])
+            out = 2'b11;
+        else if (in[2])
+            out = 2'b10;
+        else if (in[1])
+            out = 2'b01;
+        else if (in[0])
+            out = 2'b00;
+        else begin
+            out = 2'b00;
+            valid = 1'b0;
+        end
+    end
+endmodule"""
+    
+    priority_tb = """`timescale 1ns / 1ps
+
+module priority_encoder_tb;
+    reg [3:0] in;
+    wire [1:0] out;
+    wire valid;
+    
+    priority_encoder uut (
+        .in(in),
+        .out(out),
+        .valid(valid)
+    );
+    
+    initial begin
+        $display("Testing Priority Encoder");
+        $monitor("Time=%0t, in=%b, out=%b, valid=%b", $time, in, out, valid);
+        
+        in = 4'b0000; #10;
+        in = 4'b0001; #10;
+        in = 4'b0010; #10;
+        in = 4'b0100; #10;
+        in = 4'b1000; #10;
+        in = 4'b1010; #10;
+        in = 4'b1111; #10;
+        
+        $finish;
+    end
+endmodule"""
+    
+    examples.append((priority_dut, priority_tb))
+    
+    # 7. Gray Code Counter
+    gray_dut = """module gray_counter(
+    input clk,
+    input reset,
+    output reg [3:0] gray_out
+);
+    reg [3:0] binary_count;
+    
+    always @(posedge clk or posedge reset) begin
+        if (reset)
+            binary_count <= 4'b0000;
+        else
+            binary_count <= binary_count + 1;
+    end
+    
+    always @(*) begin
+        gray_out = binary_count ^ (binary_count >> 1);
+    end
+endmodule"""
+    
+    gray_tb = """`timescale 1ns / 1ps
+
+module gray_counter_tb;
+    reg clk, reset;
+    wire [3:0] gray_out;
+    
+    gray_counter uut (
+        .clk(clk),
+        .reset(reset),
+        .gray_out(gray_out)
+    );
+    
+    initial begin
+        clk = 0;
+        forever #5 clk = ~clk;
+    end
+    
+    initial begin
+        $display("Testing Gray Code Counter");
+        $monitor("Time=%0t, gray_out=%b", $time, gray_out);
+        
+        reset = 1;
+        #15 reset = 0;
+        
+        // Count for 16 cycles to see full sequence
+        #160;
+        
+        $finish;
+    end
+endmodule"""
+    
+    examples.append((gray_dut, gray_tb))
+    
+    # 8. Decoder 2-to-4
+    decoder_dut = """module decoder_2to4(
+    input [1:0] in,
+    input enable,
+    output reg [3:0] out
+);
+    always @(*) begin
+        if (enable) begin
+            case (in)
+                2'b00: out = 4'b0001;
+                2'b01: out = 4'b0010;
+                2'b10: out = 4'b0100;
+                2'b11: out = 4'b1000;
+            endcase
+        end else
+            out = 4'b0000;
+    end
+endmodule"""
+    
+    decoder_tb = """`timescale 1ns / 1ps
+
+module decoder_2to4_tb;
+    reg [1:0] in;
+    reg enable;
+    wire [3:0] out;
+    
+    decoder_2to4 uut (
+        .in(in),
+        .enable(enable),
+        .out(out)
+    );
+    
+    initial begin
+        $display("Testing 2-to-4 Decoder");
+        
+        // Test with enable = 0
+        enable = 0;
+        in = 2'b00; #10;
+        $display("enable=%b, in=%b, out=%b", enable, in, out);
+        
+        // Test with enable = 1
+        enable = 1;
+        in = 2'b00; #10;
+        $display("enable=%b, in=%b, out=%b", enable, in, out);
+        
+        in = 2'b01; #10;
+        $display("enable=%b, in=%b, out=%b", enable, in, out);
+        
+        in = 2'b10; #10;
+        $display("enable=%b, in=%b, out=%b", enable, in, out);
+        
+        in = 2'b11; #10;
+        $display("enable=%b, in=%b, out=%b", enable, in, out);
+        
+        $finish;
+    end
+endmodule"""
+    
+    examples.append((decoder_dut, decoder_tb))
+    
+    # 9. Simple state machine (2-bit sequence detector)
+    fsm_dut = """module sequence_detector(
+    input clk,
+    input reset,
+    input in,
+    output reg detected
+);
+    reg [1:0] state;
+    parameter S0 = 2'b00, S1 = 2'b01, S2 = 2'b10;
+    
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            state <= S0;
+            detected <= 1'b0;
+        end else begin
+            case (state)
+                S0: begin
+                    if (in) state <= S1;
+                    detected <= 1'b0;
+                end
+                S1: begin
+                    if (in) state <= S2;
+                    else state <= S0;
+                    detected <= 1'b0;
+                end
+                S2: begin
+                    if (in) begin
+                        state <= S2;
+                        detected <= 1'b1;
+                    end else begin
+                        state <= S0;
+                        detected <= 1'b0;
+                    end
+                end
+                default: state <= S0;
+            endcase
+        end
+    end
+endmodule"""
+    
+    fsm_tb = """`timescale 1ns / 1ps
+
+module sequence_detector_tb;
+    reg clk, reset, in;
+    wire detected;
+    
+    sequence_detector uut (
+        .clk(clk),
+        .reset(reset),
+        .in(in),
+        .detected(detected)
+    );
+    
+    initial begin
+        clk = 0;
+        forever #5 clk = ~clk;
+    end
+    
+    initial begin
+        $display("Testing Sequence Detector (111)");
+        
+        reset = 1; in = 0;
+        #10 reset = 0;
+        
+        // Test sequence: 0110111
+        in = 0; #10;
+        $display("Time=%0t, in=%b, detected=%b", $time, in, detected);
+        
+        in = 1; #10;
+        $display("Time=%0t, in=%b, detected=%b", $time, in, detected);
+        
+        in = 1; #10;
+        $display("Time=%0t, in=%b, detected=%b", $time, in, detected);
+        
+        in = 0; #10;
+        $display("Time=%0t, in=%b, detected=%b", $time, in, detected);
+        
+        in = 1; #10;
+        $display("Time=%0t, in=%b, detected=%b", $time, in, detected);
+        
+        in = 1; #10;
+        $display("Time=%0t, in=%b, detected=%b", $time, in, detected);
+        
+        in = 1; #10;
+        $display("Time=%0t, in=%b, detected=%b (should be 1)", $time, in, detected);
+        
+        #10 $finish;
+    end
+endmodule"""
+    
+    examples.append((fsm_dut, fsm_tb))
+    
+    # 10. Comparator
+    comp_dut = """module comparator_4bit(
+    input [3:0] a,
+    input [3:0] b,
+    output a_greater,
+    output a_equal,
+    output a_less
+);
+    assign a_greater = (a > b);
+    assign a_equal = (a == b);
+    assign a_less = (a < b);
+endmodule"""
+    
+    comp_tb = """`timescale 1ns / 1ps
+
+module comparator_4bit_tb;
+    reg [3:0] a, b;
+    wire a_greater, a_equal, a_less;
+    
+    comparator_4bit uut (
+        .a(a),
+        .b(b),
+        .a_greater(a_greater),
+        .a_equal(a_equal),
+        .a_less(a_less)
+    );
+    
+    initial begin
+        $display("Testing 4-bit Comparator");
+        
+        a = 4'd5; b = 4'd3; #10;
+        $display("a=%d, b=%d: greater=%b, equal=%b, less=%b", a, b, a_greater, a_equal, a_less);
+        
+        a = 4'd7; b = 4'd7; #10;
+        $display("a=%d, b=%d: greater=%b, equal=%b, less=%b", a, b, a_greater, a_equal, a_less);
+        
+        a = 4'd2; b = 4'd9; #10;
+        $display("a=%d, b=%d: greater=%b, equal=%b, less=%b", a, b, a_greater, a_equal, a_less);
+        
+        a = 4'd15; b = 4'd0; #10;
+        $display("a=%d, b=%d: greater=%b, equal=%b, less=%b", a, b, a_greater, a_equal, a_less);
+        
+        $finish;
+    end
+endmodule"""
+    
+    examples.append((comp_dut, comp_tb))
+    
     return examples
 
 
