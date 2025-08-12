@@ -70,6 +70,36 @@ class TestbenchEvaluator:
             input_widths = {}
             output_widths = {}
         
+        # Build port declarations for template
+        input_declarations = []
+        for inp in inputs:
+            if inp in input_widths and input_widths[inp] > 1:
+                input_declarations.append(f"    reg [{input_widths[inp]-1}:0] {inp};")
+            else:
+                input_declarations.append(f"    reg {inp};")
+        
+        output_declarations = []
+        for out in outputs:
+            if out in output_widths and output_widths[out] > 1:
+                output_declarations.append(f"    wire [{output_widths[out]-1}:0] {out};")
+            else:
+                output_declarations.append(f"    wire {out};")
+        
+        # Build port connections
+        port_connections = []
+        all_ports = inputs + outputs
+        for i, port in enumerate(all_ports):
+            if i < len(all_ports) - 1:
+                port_connections.append(f"        .{port}({port}),")
+            else:
+                port_connections.append(f"        .{port}({port})")
+        
+        # Build input initializations
+        input_inits = []
+        for inp in inputs:
+            width = input_widths.get(inp, 1)
+            input_inits.append(f"        {inp} = {width}'b0;")
+        
         # Create enhanced prompt with syntax guidance
         prompt = f"""Generate a Verilog testbench for the following design under test (DUT). The testbench should include proper initialization, stimulus generation, and output verification.
 
@@ -103,19 +133,19 @@ TEMPLATE STRUCTURE TO FOLLOW:
 
 module {module_name}_tb;
     // Declare registers for all inputs
-{chr(10).join(f"    reg {f'[{input_widths.get(inp, 1)-1}:0] ' if inp in input_widths and input_widths[inp] > 1 else ''}{inp};" for inp in inputs)}
+{chr(10).join(input_declarations)}
     
     // Declare wires for all outputs
-{chr(10).join(f"    wire {f'[{output_widths.get(out, 1)-1}:0] ' if out in output_widths and output_widths[out] > 1 else ''}{out};" for out in outputs)}
+{chr(10).join(output_declarations)}
     
     // Instantiate the DUT
     {module_name} uut (
-{chr(10).join(f"        .{port}({port}){',' if i < len(inputs + outputs) - 1 else ''}' for i, port in enumerate(inputs + outputs))}
+{chr(10).join(port_connections)}
     );
     
     initial begin
         // Initialize all inputs to 0
-{chr(10).join(f"        {inp} = {input_widths.get(inp, 1)}'b0;" for inp in inputs)}
+{chr(10).join(input_inits)}
         
         // Add your test cases here
         #10; // Wait 10 time units
