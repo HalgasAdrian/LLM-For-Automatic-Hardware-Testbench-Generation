@@ -22,6 +22,21 @@ class DataProcessor:
         
     def create_instruction_pair(self, dut_code: str, testbench_code: str) -> Dict[str, str]:
         """Create instruction-response pair for training."""
+        
+        # Clean the testbench code - remove markdown
+        if "```verilog" in testbench_code:
+            testbench_code = testbench_code.split("```verilog")[1]
+            if "```" in testbench_code:
+                testbench_code = testbench_code.split("```")[0]
+        elif "```" in testbench_code:
+            # Handle case with just ``` markers
+            parts = testbench_code.split("```")
+            if len(parts) >= 3:
+                testbench_code = parts[1]  # Get the code between markers
+        
+        # Strip extra whitespace
+        testbench_code = testbench_code.strip()
+        
         instruction = (
             "Generate a Verilog testbench for the following design under test (DUT). "
             "The testbench should include proper initialization, stimulus generation, "
@@ -29,7 +44,8 @@ class DataProcessor:
             f"```verilog\n{dut_code.strip()}\n```"
         )
         
-        response = f"```verilog\n{testbench_code.strip()}\n```"
+        # Don't include markdown in the response - just pure Verilog
+        response = testbench_code
         
         return {
             "instruction": instruction,
