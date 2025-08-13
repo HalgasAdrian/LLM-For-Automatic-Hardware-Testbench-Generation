@@ -6,13 +6,15 @@ DataProcessor and VerilogProcessor utilities, eliminating
 redundant code from individual scripts.
 
 Usage:
-    python data_pipeline.py --help           # Show all options
-    python data_pipeline.py --all           # Run complete pipeline
-    python data_pipeline.py --download      # Download datasets
-    python data_pipeline.py --process       # Process raw data
-    python data_pipeline.py --augment       # Add synthetic examples
-    python data_pipeline.py --validate      # Validate and fix data
-    python data_pipeline.py --analyze       # Analyze datasets
+    Make sure to have done: source venv/bin/activate
+
+    python scripts/data_pipeline.py --help           # Show all options
+    python scripts/data_pipeline.py --all           # Run complete pipeline
+    python scripts/data_pipeline.py --download      # Download datasets
+    python scripts/data_pipeline.py --process       # Process raw data
+    python scripts/data_pipeline.py --augment       # Add synthetic examples
+    python scripts/data_pipeline.py --validate      # Validate and fix data
+    python scripts/data_pipeline.py --analyze       # Analyze datasets
 """
 
 import os
@@ -1072,8 +1074,15 @@ def main():
     print("PIPELINE COMPLETE!")
     print("="*60)
     print("\nNext steps:")
-    print("1. Run 'python scripts/train.py' to train the model")
-    print("2. Run 'python scripts/evaluate.py' to evaluate performance")
+    print("Before you continue, make sure to create a backup of the current training data:")
+    print("cp data/processed/train/train.jsonl data/processed/train/train_original.jsonl")
+    print("Replace with augmented data:")
+    print("mv data/processed/train/train_augmented.jsonl data/processed/train/train.jsonl")
+    print("Verifty the change, new data size should show 59 lines, 43 original and 16 synthetic:")
+    print("wc -l data/processed/train/train.jsonl")
+    print("1. Run 'python scripts/prepare_for_colab.py' to train the model")
+    print("2. Take downloaded zip and bring over to Google Colab notebook train_on_colab.ipynb")
+    print("3. Load .zip onto notebook, run through train.py and evaluate.py to see model performance")
 
 
 if __name__ == "__main__":
