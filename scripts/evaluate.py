@@ -41,8 +41,12 @@ class TestbenchEvaluator:
             timeout=config['evaluation']['iverilog_timeout']
         )
         
-    def generate_testbench(self, dut_code: str, max_new_tokens: int = 2048) -> str:
-        """Generate a testbench for given DUT code with improved prompting."""
+    def generate_testbench(self, dut_code: str, max_new_tokens: int = None) -> str:
+        """Generate a testbench for given DUT code with simplified prompting."""
+        
+        # Use config value if not specified, default to 4096
+        if max_new_tokens is None:
+            max_new_tokens = self.config['generation'].get('max_new_tokens', 4096)
         
         # Extract module information from DUT
         module_match = re.search(r'module\s+(\w+)\s*\((.*?)\);', dut_code, re.DOTALL)
@@ -53,129 +57,47 @@ class TestbenchEvaluator:
             # Extract ports
             inputs = re.findall(r'input\s+(?:\[\d+:\d+\]\s+)?(\w+)', ports_section)
             outputs = re.findall(r'output\s+(?:reg\s+)?(?:\[\d+:\d+\]\s+)?(\w+)', ports_section)
-            
-            # Extract bit widths
-            input_widths = {}
-            output_widths = {}
-            for match in re.finditer(r'input\s+\[(\d+):(\d+)\]\s+(\w+)', ports_section):
-                width = int(match.group(1)) - int(match.group(2)) + 1
-                input_widths[match.group(3)] = width
-            for match in re.finditer(r'output\s+(?:reg\s+)?\[(\d+):(\d+)\]\s+(\w+)', ports_section):
-                width = int(match.group(1)) - int(match.group(2)) + 1
-                output_widths[match.group(3)] = width
         else:
             module_name = "top_module"
             inputs = []
             outputs = []
-            input_widths = {}
-            output_widths = {}
         
-        # Build port declarations for template
-        input_declarations = []
-        for inp in inputs:
-            if inp in input_widths and input_widths[inp] > 1:
-                input_declarations.append(f"    reg [{input_widths[inp]-1}:0] {inp};")
-            else:
-                input_declarations.append(f"    reg {inp};")
-        
-        output_declarations = []
-        for out in outputs:
-            if out in output_widths and output_widths[out] > 1:
-                output_declarations.append(f"    wire [{output_widths[out]-1}:0] {out};")
-            else:
-                output_declarations.append(f"    wire {out};")
-        
-        # Build port connections
-        port_connections = []
-        all_ports = inputs + outputs
-        for i, port in enumerate(all_ports):
-            if i < len(all_ports) - 1:
-                port_connections.append(f"        .{port}({port}),")
-            else:
-                port_connections.append(f"        .{port}({port})")
-        
-        # Build input initializations
-        input_inits = []
-        for inp in inputs:
-            width = input_widths.get(inp, 1)
-            input_inits.append(f"        {inp} = {width}'b0;")
-        
-        # Create enhanced prompt with syntax guidance
-        prompt = f"""Generate a Verilog testbench for the following design under test (DUT). The testbench should include proper initialization, stimulus generation, and output verification.
+        # SIMPLIFIED PROMPT - Much shorter to save tokens
+        prompt = f"""Generate a complete Verilog testbench for this DUT:
 
-CRITICAL VERILOG SYNTAX RULES - MUST FOLLOW:
-1. Start EXACTLY with: `timescale 1ns / 1ps
-2. Module declaration: module {module_name}_tb; (no parentheses for testbench)
-3. Use 'initial begin' NOT 'initial {{' - always use 'begin/end' keywords
-4. Every 'begin' MUST have a matching 'end'
-5. Declare ALL inputs as 'reg' type
-6. Declare ALL outputs as 'wire' type
-7. For bit vectors use format [MSB:0], e.g., reg [7:0] data; for 8-bit signal
-8. Binary literals: use width'b format, e.g., 8'b10101010 NOT 10'b10101010
-9. Cannot assign values to wires in initial blocks
-10. End the file with 'endmodule'
-11. Use $finish; to end simulation (with semicolon)
-12. Only ONE testbench module per file
-
-DUT CODE:
 ```verilog
 {dut_code.strip()}
 ```
 
-Based on the DUT above:
-- Module name: {module_name}
-- Inputs to declare as reg: {', '.join(inputs)}
-- Outputs to declare as wire: {', '.join(outputs)}
+Requirements:
+- Start with `timescale 1ns / 1ps
+- Module name: {module_name}_tb;
+- Inputs ({', '.join(inputs)}) as reg
+- Outputs ({', '.join(outputs)}) as wire
+- Instantiate DUT as 'uut'
+- Add initial block with test cases
+- Include $display statements
+- End with $finish; and endmodule
 
-TEMPLATE STRUCTURE TO FOLLOW:
-```verilog
+### Response:
 `timescale 1ns / 1ps
 
-module {module_name}_tb;
-    // Declare registers for all inputs
-{chr(10).join(input_declarations)}
-    
-    // Declare wires for all outputs
-{chr(10).join(output_declarations)}
-    
-    // Instantiate the DUT
-    {module_name} uut (
-{chr(10).join(port_connections)}
-    );
-    
-    initial begin
-        // Initialize all inputs to 0
-{chr(10).join(input_inits)}
+module {module_name}_tb;"""
         
-        // Add your test cases here
-        #10; // Wait 10 time units
-        
-        // Display initial values
-        $display("Starting testbench for {module_name}");
-        
-        // Test cases go here
-        
-        // End simulation
-        #100;
-        $display("Test completed");
-        $finish;
-    end
-endmodule
-```
-
-Now generate a complete, syntactically correct testbench following the template above. Include meaningful test cases based on the DUT functionality.
-
-### Response:"""
-        
-        # Tokenize
-        inputs_tok = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=2048)
+        # Tokenize with SMALLER max_length for prompt to leave room for generation
+        inputs_tok = self.tokenizer(
+            prompt, 
+            return_tensors="pt", 
+            truncation=True, 
+            max_length=1024  # Reduced from 2048 to leave room for generation
+        )
         inputs_tok = {k: v.to(self.model.device) for k, v in inputs_tok.items()}
         
-        # Generate
+        # Generate with MORE tokens
         with torch.no_grad():
             outputs = self.model.generate(
                 **inputs_tok,
-                max_new_tokens=max_new_tokens,
+                max_new_tokens=max_new_tokens,  # Now uses 4096 from config
                 temperature=self.config['generation']['temperature'],
                 top_p=self.config['generation']['top_p'],
                 do_sample=self.config['generation']['do_sample'],
@@ -196,6 +118,10 @@ Now generate a complete, syntactically correct testbench following the template 
         # Additional post-processing to fix common issues
         generated_text = self.post_process_testbench(generated_text)
         
+        # Ensure it starts with timescale if missing
+        if not generated_text.startswith('`timescale'):
+            generated_text = '`timescale 1ns / 1ps\n\n' + generated_text
+        
         return generated_text
     
     def post_process_testbench(self, tb_code: str) -> str:
@@ -206,13 +132,41 @@ Now generate a complete, syntactically correct testbench following the template 
         
         # Fix common syntax errors
         tb_code = tb_code.replace('initial {', 'initial begin')
-        tb_code = tb_code.replace('}', 'end')
         
-        # Fix incorrect bit width syntax (e.g., 10'b to 8'b)
-        tb_code = re.sub(r"(\d+)'b(\d+)", lambda m: f"{len(m.group(2))}'b{m.group(2)}", tb_code)
+        # Be more careful with brace replacement - only replace standalone braces
+        lines = tb_code.split('\n')
+        fixed_lines = []
+        for line in lines:
+            # Don't replace } in things like 4'b{1,0,1,0}
+            if line.strip() == '}':
+                fixed_lines.append(line.replace('}', 'end'))
+            elif line.strip().startswith('}') and '//' in line:
+                # Handle "} // comment" case
+                fixed_lines.append(line.replace('}', 'end', 1))
+            else:
+                fixed_lines.append(line)
+        tb_code = '\n'.join(fixed_lines)
+        
+        # Fix incorrect bit width syntax (e.g., 10'b101 should be 3'b101)
+        def fix_bit_width(match):
+            width = match.group(1)
+            binary = match.group(2)
+            actual_width = len(binary)
+            return f"{actual_width}'b{binary}"
+        
+        tb_code = re.sub(r"(\d+)'b([01]+)", fix_bit_width, tb_code)
         
         # Ensure proper module ending
         if 'endmodule' not in tb_code:
+            # Check if we need to close any open blocks first
+            begin_count = tb_code.count('begin')
+            end_count = tb_code.count('end')
+            
+            if begin_count > end_count:
+                # Add missing ends
+                for _ in range(begin_count - end_count):
+                    tb_code += '\nend'
+            
             tb_code = tb_code.rstrip() + '\nendmodule'
         
         # Fix missing semicolons after $finish
@@ -241,15 +195,21 @@ Now generate a complete, syntactically correct testbench following the template 
             'syntax_valid': False,
             'has_required_components': {},
             'error_message': None,
-            'generated_testbench': None
+            'generated_testbench': None,
+            'generation_length': 0
         }
         
         try:
-            # Generate testbench
+            # Generate testbench with increased token limit
             logger.info("Generating testbench...")
-            generated_tb = self.generate_testbench(dut_code)
+            generated_tb = self.generate_testbench(dut_code, max_new_tokens=4096)
             results['generated_testbench'] = generated_tb
             results['generation_success'] = True
+            results['generation_length'] = len(generated_tb)
+            
+            # Log generation details for debugging
+            logger.debug(f"Generated testbench length: {len(generated_tb)} characters")
+            logger.debug(f"Ends with endmodule: {'endmodule' in generated_tb}")
             
             # Validate syntax and structure
             validations = self.verilog_processor.validate_testbench_structure(generated_tb)
@@ -323,6 +283,13 @@ Now generate a complete, syntactically correct testbench following the template 
         
         metrics.update(component_stats)
         
+        # Add generation length statistics
+        gen_lengths = [r['generation_length'] for r in results if r['generation_success']]
+        if gen_lengths:
+            metrics['avg_generation_length'] = sum(gen_lengths) / len(gen_lengths)
+            metrics['min_generation_length'] = min(gen_lengths)
+            metrics['max_generation_length'] = max(gen_lengths)
+        
         return metrics
 
 
@@ -336,14 +303,27 @@ def load_model(config: dict):
     # Load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     
-    # Load base model with better memory management for macOS
-    model = AutoModelForCausalLM.from_pretrained(
-        base_model_name,
-        torch_dtype=torch.float32,  # Changed from float16 for CPU
-        device_map=None,  # Disable automatic device mapping
-        trust_remote_code=True,
-        low_cpu_mem_usage=True  # Better memory management
-    )
+    # Load base model with better memory management
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    
+    if device == "cuda":
+        # Use float16 for GPU
+        model = AutoModelForCausalLM.from_pretrained(
+            base_model_name,
+            torch_dtype=torch.float16,
+            device_map="auto",
+            trust_remote_code=True,
+            low_cpu_mem_usage=True
+        )
+    else:
+        # Use float32 for CPU
+        model = AutoModelForCausalLM.from_pretrained(
+            base_model_name,
+            torch_dtype=torch.float32,
+            device_map=None,
+            trust_remote_code=True,
+            low_cpu_mem_usage=True
+        )
     
     # Load LoRA weights
     logger.info(f"Loading LoRA weights from: {model_path}")
@@ -351,8 +331,8 @@ def load_model(config: dict):
         model = PeftModel.from_pretrained(
             model, 
             model_path,
-            device_map=None,  # Disable device mapping for PEFT too
-            offload_folder=None  # Disable offloading
+            device_map="auto" if device == "cuda" else None,
+            offload_folder=None
         )
     except Exception as e:
         logger.warning(f"Error loading with PeftModel: {e}")
@@ -381,12 +361,12 @@ def load_model(config: dict):
         # Load the weights manually
         adapter_weights = torch.load(
             model_path / "adapter_model.safetensors",
-            map_location="cpu"
+            map_location=device
         )
         model.load_state_dict(adapter_weights, strict=False)
     
     # Move to appropriate device
-    if torch.cuda.is_available():
+    if device == "cuda":
         model = model.cuda()
     elif torch.backends.mps.is_available():
         # For Apple Silicon
@@ -398,11 +378,58 @@ def load_model(config: dict):
     return model, tokenizer
 
 
+def test_generation_completeness(model, tokenizer, config):
+    """Quick test to verify generation completes properly."""
+    print("\n" + "="*60)
+    print("TESTING GENERATION COMPLETENESS")
+    print("="*60)
+    
+    # Simple test DUT
+    test_dut = """module counter(
+    input clk,
+    input reset,
+    output reg [3:0] count
+);
+    always @(posedge clk or posedge reset) begin
+        if (reset)
+            count <= 4'b0000;
+        else
+            count <= count + 1;
+    end
+endmodule"""
+    
+    evaluator = TestbenchEvaluator(model, tokenizer, config)
+    
+    # Test with different token limits
+    for max_tokens in [2048, 4096, 6000]:
+        print(f"\nTesting with max_new_tokens={max_tokens}")
+        result = evaluator.generate_testbench(test_dut, max_new_tokens=max_tokens)
+        
+        print(f"  Generated length: {len(result)} characters")
+        print(f"  Has endmodule: {'endmodule' in result}")
+        print(f"  Has $finish: {'$finish' in result}")
+        
+        if len(result) > 200:
+            print(f"  Last 200 chars: ...{result[-200:]}")
+        
+        # Check if it's complete
+        if 'endmodule' in result and '$finish' in result:
+            print(f"  ✅ Complete testbench generated!")
+            break
+        else:
+            print(f"  ⚠️ Incomplete generation, trying with more tokens...")
+    
+    return result
+
+
 def main():
     """Main evaluation function."""
     # Load configuration
     with open('configs/config.yaml', 'r') as f:
         config = yaml.safe_load(f)
+    
+    # Update generation config to use more tokens
+    config['generation']['max_new_tokens'] = 4096
     
     # Load test data
     test_data_path = Path(config['data']['processed_data_path']) / "test" / "test.jsonl"
@@ -419,11 +446,17 @@ def main():
     logger.info("Loading trained model...")
     model, tokenizer = load_model(config)
     
+    # Optional: Run quick test first
+    if len(sys.argv) > 1 and sys.argv[1] == '--test':
+        test_generation_completeness(model, tokenizer, config)
+        return
+    
     # Create evaluator
     evaluator = TestbenchEvaluator(model, tokenizer, config)
     
     # Run evaluation
     logger.info("Starting evaluation...")
+    logger.info(f"Using max_new_tokens: {config['generation']['max_new_tokens']}")
     results = evaluator.evaluate_dataset(test_data)
     
     # Save results
@@ -458,6 +491,12 @@ def main():
     for key, value in metrics.items():
         if '_rate' in key and 'has_' in key:
             print(f"  {key.replace('_rate', '').replace('has_', '')}: {value:.1%}")
+    
+    if 'avg_generation_length' in metrics:
+        print(f"\nGeneration Statistics:")
+        print(f"  Average length: {metrics['avg_generation_length']:.0f} chars")
+        print(f"  Min length: {metrics['min_generation_length']} chars")
+        print(f"  Max length: {metrics['max_generation_length']} chars")
     
     print(f"\nDetailed results saved to: {output_dir}")
     print("\nNext step: Run 'python scripts/generate.py --dut_file <your_design.v>' to generate testbenches for new designs")
