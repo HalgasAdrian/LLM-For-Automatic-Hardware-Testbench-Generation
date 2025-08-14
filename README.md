@@ -61,34 +61,28 @@ nano .env
 
 ## Quick Start
 
-### 1. Download Datasets
+### 1. Data Pipeline
 
 ```bash
-python scripts/download_data.py
+python scripts/data_pipeline.py
 ```
 
-### 2. Process Data
+### 2. Zip files to compute on Colab
 
 ```bash
-python scripts/process_data.py
+python scripts/prepare_for_colab.py
 ```
 
-### 3. Train Model
+### 3. Upload zip to colab and Train Model
 
 ```bash
 python scripts/train.py
 ```
 
-### 4. Evaluate
+### 4. Evaluate on Colab Notebook
 
 ```bash
 python scripts/evaluate.py
-```
-
-### 5. Generate Testbenches
-
-```bash
-python scripts/generate.py --dut_file path/to/your/design.v
 ```
 
 ## Datasets
@@ -101,7 +95,7 @@ The project uses three main datasets:
 
 ## Model Architecture
 
-- **Base Model**: TinyLlama-1.1B (upgradeable to Llama-2-7B)
+- **Base Model**: TinyLlama-1.1B
 - **Fine-tuning**: LoRA with rank 16
 - **Quantization**: 4-bit quantization using BitsAndBytes
 
@@ -165,3 +159,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - MG-Verilog dataset from GaTech-EIC
 - HDLBits for Verilog problems
 - Hugging Face for transformer models
+- Claude for coding help
