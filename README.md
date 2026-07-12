@@ -38,7 +38,7 @@ llm-testbench-gen/
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/llm-testbench-gen.git
+git clone https://github.com/HalgasAdrian/llm-testbench-gen.git
 cd llm-testbench-gen
 ```
 
@@ -143,9 +143,9 @@ If you use this project in your research, please cite:
 ```bibtex
 @software{llm_testbench_gen,
   title = {LLM-based Hardware Testbench Generation},
-  author = {Your Name},
+  author = {Adrian Halgas},
   year = {2024},
-  url = {https://github.com/yourusername/llm-testbench-gen}
+  url = {https://github.com/HalgasAdrian/llm-testbench-gen}
 }
 ```
 
